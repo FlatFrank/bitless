@@ -1,0 +1,217 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Bitless</title>
+  <meta name="description" content="Transform images into pixel art with dithering algorithms and custom color palettes">
+  <style>
+    *{margin:0;padding:0;box-sizing:border-box}
+    :root{--bg:#E8E8E8;--surface:rgba(255,255,255,.85);--border:rgba(0,0,0,.1);--primary:#FF6B35;--text:#1A1A1A;--text-sec:#666;--text-dim:#999}
+    [data-theme=dark]{--bg:#0A0A0A;--surface:rgba(20,20,20,.85);--border:rgba(255,255,255,.08);--text:#E8E8E8;--text-sec:#888;--text-dim:#555}
+    body{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace;background:var(--bg);color:var(--text);min-height:100vh;overflow:hidden;transition:background .3s}
+    body::before{content:'';position:fixed;inset:0;background-image:radial-gradient(var(--border) 1px,transparent 1px);background-size:24px 24px;pointer-events:none;opacity:.5}
+    .canvas{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;padding:40px}
+    .canvas canvas{image-rendering:pixelated;image-rendering:crisp-edges;max-width:80vw;max-height:80vh;box-shadow:0 4px 24px rgba(0,0,0,.2)}
+    .upload{display:flex;flex-direction:column;align-items:center;gap:16px;color:var(--text-dim);padding:80px 120px;border:2px dashed var(--border);border-radius:12px;cursor:pointer;transition:all .2s}
+    .upload:hover{border-color:var(--primary);color:var(--text-sec)}
+    .upload svg{width:48px;height:48px;opacity:.5}
+    .panel{position:fixed;top:40px;left:40px;width:300px;background:var(--surface);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px);border:1px solid var(--border);border-radius:12px;display:flex;flex-direction:column;z-index:100;box-shadow:0 8px 32px rgba(0,0,0,.3);max-height:calc(100vh - 80px)}
+    .panel-head{padding:14px 18px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;cursor:grab;user-select:none}
+    .panel-head:active{cursor:grabbing}
+    .panel-title{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:var(--text-sec)}
+    .theme-btn{width:28px;height:28px;background:0;border:1px solid var(--border);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--text-sec);transition:all .15s}
+    .theme-btn:hover{border-color:var(--text-dim);color:var(--text)}
+    .theme-btn svg{width:14px;height:14px}
+    .panel-body{flex:1;overflow-y:auto;padding:18px}
+    .panel-foot{padding:14px 18px;border-top:1px solid var(--border);display:flex;flex-direction:column;gap:8px}
+    .section{margin-bottom:24px}
+    .section:last-child{margin-bottom:0}
+    .section-head{display:flex;align-items:center;gap:8px;margin-bottom:12px}
+    .section-icon{width:14px;height:14px;color:var(--primary)}
+    .section-title{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-sec)}
+    .presets{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .preset{padding:9px 14px;background:0;border:1px solid var(--border);border-radius:20px;color:var(--text-sec);font:inherit;font-size:9px;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .15s}
+    .preset:hover{border-color:var(--text-dim);color:var(--text)}
+    .preset.on{background:var(--primary);border-color:var(--primary);color:#fff}
+    .slider{margin-bottom:16px}
+    .slider-head{display:flex;justify-content:space-between;margin-bottom:10px}
+    .slider-label{font-size:11px}
+    .slider-val{font-size:11px;font-weight:600;color:var(--primary)}
+    input[type=range]{width:100%;height:3px;background:var(--border);border-radius:2px;outline:0;-webkit-appearance:none}
+    input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:14px;height:14px;background:var(--primary);border-radius:50%;cursor:pointer}
+    .dropdown{margin-bottom:16px}
+    .dropdown-label{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--text-sec);margin-bottom:10px;display:block}
+    select{width:100%;padding:10px 12px;background:var(--bg);border:1px solid var(--border);border-radius:6px;color:var(--text);font:inherit;font-size:11px;cursor:pointer;outline:0;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' fill='none' stroke='%23888' stroke-width='2'%3E%3Cpath d='M2 4l4 4 4-4'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center}
+    select:hover{border-color:var(--text-dim)}
+    select:focus{border-color:var(--primary)}
+    .palette{height:28px;border-radius:6px;overflow:hidden;display:flex;border:1px solid var(--border)}
+    .palette span{flex:1}
+    .btn{width:100%;padding:11px 16px;border-radius:6px;font:inherit;font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:all .15s;display:flex;align-items:center;justify-content:center;gap:8px}
+    .btn-sec{background:0;border:1px solid var(--border);color:var(--text-sec)}
+    .btn-sec:hover{border-color:var(--text-dim);color:var(--text)}
+    .btn-pri{background:var(--primary);border:0;color:#fff}
+    .btn-pri:hover{background:#ff7d4d}
+    .btn-pri:disabled{background:var(--border);color:var(--text-dim);cursor:not-allowed}
+    .btn svg{width:14px;height:14px}
+    .loader{position:fixed;inset:0;background:rgba(10,10,10,.85);display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;opacity:0;pointer-events:none;transition:opacity .2s;z-index:200}
+    .loader.on{opacity:1;pointer-events:auto}
+    .spinner{width:32px;height:32px;border:2px solid var(--border);border-top-color:var(--primary);border-radius:50%;animation:spin .8s linear infinite}
+    @keyframes spin{to{transform:rotate(360deg)}}
+    .loader span{font-size:11px;letter-spacing:2px;color:var(--text-dim)}
+    .hide{display:none!important}
+    #file{display:none}
+  </style>
+</head>
+<body data-theme="light">
+  <main class="canvas" id="canvas">
+    <div class="upload" id="upload">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M12 16V8m0 0l-4 4m4-4l4 4"/><rect x="3" y="3" width="18" height="18" rx="2"/></svg>
+      <span>Click or drop image</span>
+    </div>
+    <div class="hide" id="output"><canvas id="result"></canvas></div>
+  </main>
+
+  <aside class="panel" id="panel">
+    <header class="panel-head" id="drag">
+      <span class="panel-title">Workspace</span>
+      <button class="theme-btn" id="theme">
+        <svg id="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><path d="M12 1v2m0 18v2M4.22 4.22l1.42 1.42m12.72 12.72l1.42 1.42M1 12h2m18 0h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42"/></svg>
+        <svg id="moon" class="hide" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/></svg>
+      </button>
+    </header>
+    <div class="panel-body">
+      <section class="section">
+        <header class="section-head">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2a7 7 0 0 0-4 12.75V17a1 1 0 0 0 1 1h6a1 1 0 0 0 1-1v-2.25A7 7 0 0 0 12 2z"/><line x1="9" y1="21" x2="15" y2="21"/><path d="M10 14.5v-3a2 2 0 0 1 2-2v0a2 2 0 0 1 2 2v3"/></svg>
+          <span class="section-title">Presets</span>
+        </header>
+        <div class="presets" id="presets"></div>
+      </section>
+      <section class="section">
+        <header class="section-head">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="2" y1="5" x2="4.5" y2="5"/><line x1="9.5" y1="5" x2="22" y2="5"/><circle cx="7" cy="5" r="2.5"/><line x1="2" y1="12" x2="11.5" y2="12"/><line x1="16.5" y1="12" x2="22" y2="12"/><circle cx="14" cy="12" r="2.5"/><line x1="2" y1="19" x2="4.5" y2="19"/><line x1="9.5" y1="19" x2="22" y2="19"/><circle cx="7" cy="19" r="2.5"/></svg>
+          <span class="section-title">Parameters</span>
+        </header>
+        <div class="slider"><div class="slider-head"><span class="slider-label">Resolution</span><span class="slider-val" id="resVal">160</span></div><input type="range" id="res" min="32" max="720" value="160"></div>
+        <div class="slider"><div class="slider-head"><span class="slider-label">Colors</span><span class="slider-val" id="colVal">6</span></div><input type="range" id="col" min="2" max="12" value="6"></div>
+        <div class="slider"><div class="slider-head"><span class="slider-label">Dither Strength</span><span class="slider-val" id="strVal">100%</span></div><input type="range" id="str" min="0" max="100" value="100"></div>
+      </section>
+      <section class="section">
+        <header class="section-head">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M9 9l-3 3 3 3"/><path d="M15 9l3 3-3 3"/></svg>
+          <span class="section-title">Algorithm</span>
+        </header>
+        <div class="dropdown"><select id="alg"><option value="bayer8">Bayer 8x8</option><option value="bayer4">Bayer 4x4</option><option value="bayer2">Bayer 2x2</option><option value="floyd">Floyd-Steinberg</option><option value="atkinson">Atkinson</option><option value="none">None</option></select></div>
+      </section>
+      <section class="section">
+        <header class="section-head">
+          <svg class="section-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><circle cx="12" cy="12" r="4"/><line x1="12" y1="2" x2="12" y2="8"/><line x1="12" y1="16" x2="12" y2="22"/><line x1="2" y1="12" x2="8" y2="12"/><line x1="16" y1="12" x2="22" y2="12"/><line x1="4.93" y1="4.93" x2="8.88" y2="8.88"/><line x1="15.12" y1="15.12" x2="19.07" y2="19.07"/><line x1="4.93" y1="19.07" x2="8.88" y2="15.12"/><line x1="15.12" y1="8.88" x2="19.07" y2="4.93"/></svg>
+          <span class="section-title">Palette</span>
+        </header>
+        <div class="dropdown"><select id="pal"><option value="bitless">Bitless</option><option value="handheld">Handheld</option><option value="retro">Retro</option><option value="terminal">Terminal</option><option value="thermal">Thermal</option><option value="neon">Neon</option><option value="pastel">Pastel</option><option value="mono">Mono</option></select></div>
+        <div class="palette" id="palPrev"></div>
+      </section>
+    </div>
+    <footer class="panel-foot">
+      <button class="btn btn-sec" id="newBtn"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>NEW IMAGE</button>
+      <button class="btn btn-pri" id="dlBtn" disabled><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14m0 0l-6-6m6 6l6-6"/><path d="M5 19h14"/></svg>DOWNLOAD IMAGE</button>
+    </footer>
+  </aside>
+
+  <div class="loader" id="loader"><div class="spinner"></div><span>PROCESSING</span></div>
+  <input type="file" id="file" accept="image/*">
+
+  <script>
+  (function(){
+    // Palettes: first 6 colors are core, 7-12 are complementary
+    const P={
+      bitless:[[26,26,26],[230,220,200],[180,100,60],[90,120,130],[156,156,156],[70,50,50],[58,58,58],[204,198,180],[210,130,80],[120,150,160],[102,102,102],[140,80,70]],
+      handheld:[[15,56,15],[155,188,15],[48,98,48],[139,172,15],[80,130,30],[200,210,60],[32,77,32],[115,160,20],[65,120,40],[170,195,25],[100,145,35],[220,225,100]],
+      retro:[[0,0,0],[255,255,255],[136,0,0],[0,204,85],[0,0,170],[238,238,119],[170,255,238],[204,68,204],[221,136,85],[0,136,255],[255,119,119],[187,187,187]],
+      terminal:[[0,0,0],[255,255,255],[85,255,255],[255,85,255],[170,0,0],[0,170,0],[85,85,255],[255,255,85],[0,170,170],[170,0,170],[255,85,85],[85,255,85]],
+      thermal:[[30,20,20],[250,245,235],[140,115,100],[210,190,170],[80,60,50],[235,220,200],[60,45,40],[180,155,135],[100,80,70],[222,205,185],[120,98,85],[195,172,152]],
+      neon:[[10,5,20],[0,255,255],[255,0,100],[255,255,100],[150,50,150],[255,100,200],[30,15,50],[0,200,200],[200,0,80],[80,30,100],[255,60,150],[180,255,120]],
+      pastel:[[20,10,40],[255,150,230],[100,200,255],[255,200,150],[150,255,255],[200,100,200],[60,30,90],[227,125,215],[80,180,235],[120,60,150],[180,255,230],[255,170,190]],
+      mono:[[0,0,0],[255,255,255],[128,128,128],[192,192,192],[64,64,64],[224,224,224],[32,32,32],[160,160,160],[96,96,96],[208,208,208],[48,48,48],[176,176,176]]
+    };
+    const presets={BITLESS:{res:160,col:6,str:100,alg:'bayer8',pal:'bitless'},HANDHELD:{res:160,col:4,str:100,alg:'bayer4',pal:'handheld'},RETRO:{res:160,col:12,str:80,alg:'bayer8',pal:'retro'},THERMAL:{res:200,col:6,str:100,alg:'bayer8',pal:'thermal'}};
+    const B2=[[0,2],[3,1]],B4=[[0,8,2,10],[12,4,14,6],[3,11,1,9],[15,7,13,5]],B8=[[0,32,8,40,2,34,10,42],[48,16,56,24,50,18,58,26],[12,44,4,36,14,46,6,38],[60,28,52,20,62,30,54,22],[3,35,11,43,1,33,9,41],[51,19,59,27,49,17,57,25],[15,47,7,39,13,45,5,37],[63,31,55,23,61,29,53,21]];
+
+    let img=null,pal='bitless',drag={on:false,x:0,y:0},timeout;
+    const $=id=>document.getElementById(id);
+    const el={canvas:$('canvas'),upload:$('upload'),output:$('output'),result:$('result'),panel:$('panel'),dragEl:$('drag'),theme:$('theme'),sun:$('sun'),moon:$('moon'),presets:$('presets'),res:$('res'),col:$('col'),str:$('str'),alg:$('alg'),palSel:$('pal'),palPrev:$('palPrev'),newBtn:$('newBtn'),dlBtn:$('dlBtn'),loader:$('loader'),file:$('file'),resVal:$('resVal'),colVal:$('colVal'),strVal:$('strVal')};
+
+    // Theme
+    el.theme.onclick=()=>{const l=document.body.dataset.theme==='light';document.body.dataset.theme=l?'dark':'light';el.sun.classList.toggle('hide',!l);el.moon.classList.toggle('hide',l)};
+
+    // Drag panel
+    el.dragEl.onmousedown=e=>{if(e.target.closest('.theme-btn'))return;drag.on=true;const r=el.panel.getBoundingClientRect();drag.x=e.clientX-r.left;drag.y=e.clientY-r.top;document.body.style.userSelect='none'};
+    document.onmousemove=e=>{if(!drag.on)return;el.panel.style.left=Math.max(0,Math.min(innerWidth-el.panel.offsetWidth,e.clientX-drag.x))+'px';el.panel.style.top=Math.max(0,Math.min(innerHeight-el.panel.offsetHeight,e.clientY-drag.y))+'px'};
+    document.onmouseup=()=>{drag.on=false;document.body.style.userSelect=''};
+
+    // Presets
+    Object.keys(presets).forEach((k,i)=>{const b=document.createElement('button');b.className='preset'+(i===0?' on':'');b.textContent=k;b.onclick=()=>applyPreset(k);el.presets.appendChild(b)});
+
+    function applyPreset(k){
+      const p=presets[k];el.res.value=p.res;el.col.value=p.col;el.str.value=p.str;el.alg.value=p.alg;el.palSel.value=p.pal;pal=p.pal;
+      el.resVal.textContent=p.res;el.colVal.textContent=p.col;el.strVal.textContent=p.str+'%';
+      updatePalette();document.querySelectorAll('.preset').forEach(b=>b.classList.toggle('on',b.textContent===k));process();
+    }
+
+    function updatePalette(){
+      el.palPrev.innerHTML='';P[pal].slice(0,+el.col.value).forEach(c=>{const s=document.createElement('span');s.style.background=`rgb(${c})`;el.palPrev.appendChild(s)});
+    }
+    updatePalette();
+
+    // Controls
+    [['res','resVal',''],['col','colVal',''],['str','strVal','%']].forEach(([id,valId,suf])=>{
+      el[id].oninput=()=>{el[valId].textContent=el[id].value+suf;if(id==='col')updatePalette();schedule();document.querySelectorAll('.preset').forEach(b=>b.classList.remove('on'))};
+    });
+    el.alg.onchange=()=>{schedule();document.querySelectorAll('.preset').forEach(b=>b.classList.remove('on'))};
+    el.palSel.onchange=()=>{pal=el.palSel.value;updatePalette();schedule();document.querySelectorAll('.preset').forEach(b=>b.classList.remove('on'))};
+
+    // File handling
+    el.upload.onclick=()=>el.file.click();
+    el.newBtn.onclick=()=>el.file.click();
+    el.canvas.ondragover=e=>e.preventDefault();
+    el.canvas.ondrop=e=>{e.preventDefault();const f=e.dataTransfer.files[0];if(f&&f.type.startsWith('image/'))load(f)};
+    el.file.onchange=e=>{if(e.target.files[0])load(e.target.files[0])};
+    el.dlBtn.onclick=()=>{const a=document.createElement('a');a.download=`bitless_${Date.now()}.png`;a.href=el.result.toDataURL('image/png');a.click()};
+
+    function load(f){
+      const r=new FileReader();r.onload=e=>{const i=new Image();i.onload=()=>{img=i;el.upload.classList.add('hide');el.output.classList.remove('hide');el.dlBtn.disabled=false;process()};i.src=e.target.result};r.readAsDataURL(f);
+    }
+
+    function schedule(){if(!img)return;clearTimeout(timeout);timeout=setTimeout(process,50)}
+
+    function process(){
+      if(!img)return;el.loader.classList.add('on');
+      requestAnimationFrame(()=>setTimeout(()=>{
+        const w=+el.res.value,h=Math.round(w*img.height/img.width),cols=+el.col.value,strength=+el.str.value/100,algorithm=el.alg.value,colors=P[pal].slice(0,cols);
+        const cv=document.createElement('canvas');cv.width=w;cv.height=h;const cx=cv.getContext('2d');cx.drawImage(img,0,0,w,h);
+        const d=cx.getImageData(0,0,w,h),data=d.data;
+        if(algorithm==='bayer8')bayer(data,w,h,colors,B8,strength);
+        else if(algorithm==='bayer4')bayer(data,w,h,colors,B4,strength);
+        else if(algorithm==='bayer2')bayer(data,w,h,colors,B2,strength);
+        else if(algorithm==='floyd')floyd(data,w,h,colors,strength);
+        else if(algorithm==='atkinson')atkinson(data,w,h,colors,strength);
+        else nearest(data,colors);
+        cx.putImageData(d,0,0);
+        const s=w<=160?3:w<=320?2:1,ow=w*s,oh=h*s;
+        el.result.width=ow;el.result.height=oh;const ox=el.result.getContext('2d');ox.imageSmoothingEnabled=false;ox.drawImage(cv,0,0,ow,oh);
+        el.loader.classList.remove('on');
+      },10));
+    }
+
+    function closest(r,g,b,colors){let min=Infinity,c=colors[0];for(const x of colors){const dr=r-x[0],dg=g-x[1],db=b-x[2],dist=dr*dr*.299+dg*dg*.587+db*db*.114;if(dist<min){min=dist;c=x}}return c}
+    function bayer(data,w,h,colors,m,s){const sz=m.length,mx=sz*sz;for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4,t=(m[y%sz][x%sz]/mx-.5)*64*s,c=closest(Math.max(0,Math.min(255,data[i]+t)),Math.max(0,Math.min(255,data[i+1]+t)),Math.max(0,Math.min(255,data[i+2]+t)),colors);data[i]=c[0];data[i+1]=c[1];data[i+2]=c[2]}}
+    function floyd(data,w,h,colors,s){const err=new Float32Array(w*h*3);for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4,e=(y*w+x)*3,r=Math.max(0,Math.min(255,data[i]+err[e])),g=Math.max(0,Math.min(255,data[i+1]+err[e+1])),b=Math.max(0,Math.min(255,data[i+2]+err[e+2])),c=closest(r,g,b,colors);data[i]=c[0];data[i+1]=c[1];data[i+2]=c[2];const er=(r-c[0])*s,eg=(g-c[1])*s,eb=(b-c[2])*s;if(x+1<w){err[e+3]+=er*7/16;err[e+4]+=eg*7/16;err[e+5]+=eb*7/16}if(y+1<h){if(x>0){err[e+w*3-3]+=er*3/16;err[e+w*3-2]+=eg*3/16;err[e+w*3-1]+=eb*3/16}err[e+w*3]+=er*5/16;err[e+w*3+1]+=eg*5/16;err[e+w*3+2]+=eb*5/16;if(x+1<w){err[e+w*3+3]+=er/16;err[e+w*3+4]+=eg/16;err[e+w*3+5]+=eb/16}}}}
+    function atkinson(data,w,h,colors,s){const err=new Float32Array(w*h*3),off=[[1,0],[2,0],[-1,1],[0,1],[1,1],[0,2]];for(let y=0;y<h;y++)for(let x=0;x<w;x++){const i=(y*w+x)*4,e=(y*w+x)*3,r=Math.max(0,Math.min(255,data[i]+err[e])),g=Math.max(0,Math.min(255,data[i+1]+err[e+1])),b=Math.max(0,Math.min(255,data[i+2]+err[e+2])),c=closest(r,g,b,colors);data[i]=c[0];data[i+1]=c[1];data[i+2]=c[2];const er=(r-c[0])*s/8,eg=(g-c[1])*s/8,eb=(b-c[2])*s/8;for(const[ox,oy]of off){const nx=x+ox,ny=y+oy;if(nx>=0&&nx<w&&ny<h){const ni=(ny*w+nx)*3;err[ni]+=er;err[ni+1]+=eg;err[ni+2]+=eb}}}}
+    function nearest(data,colors){for(let i=0;i<data.length;i+=4){const c=closest(data[i],data[i+1],data[i+2],colors);data[i]=c[0];data[i+1]=c[1];data[i+2]=c[2]}}
+
+    applyPreset('BITLESS');
+  })();
+  </script>
+</body>
+</html>
